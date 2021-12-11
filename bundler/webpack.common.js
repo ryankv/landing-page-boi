@@ -79,7 +79,7 @@ module.exports = {
             },
             // TEXTURES
             {   
-                test: /\.exr$/,
+                test: /\.glb$/,
                 use: [
                 {
                     loader: 'file-loader',
