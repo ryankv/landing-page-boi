@@ -1,136 +1,99 @@
 import './style.css'
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import equirectangular from './textures/kairon-4.png'
+import { RoughnessMipmapper } from 'three/examples/jsm/utils/RoughnessMipmapper.js';
+import equirectangular from './textures/hilly_terrain_01_2k.hdr'
 import model from './textures/Lirona.glb';
 
-const params = {
-    envMap: 'PNG',
-    roughness: 0.0,
-    metalness: 0.8,
-    exposure: 1.0,
-    debug: false,
-};
-
-let camera, scene, renderer, controls;
-let torusMesh, planeMesh;
-let pngCubeRenderTarget, exrCubeRenderTarget;
-let pngBackground, exrBackground;
+let camera, scene, renderer;
 
 init();
-animate();
+render();
 
 function init() {
-    camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 1000 );
-    camera.position.set( 0, 0, 120 );
+
+    const container = document.createElement( 'div' );
+    document.body.appendChild( container );
+
+    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.25, 20 );
+    camera.position.set( 10, 6, 10 );
 
     scene = new THREE.Scene();
 
-    renderer = new THREE.WebGLRenderer();
-    renderer.setClearColor( 0xffffff, 0);
+    new RGBELoader()
+        .load( equirectangular, function ( texture ) {
 
-    //
+            texture.mapping = THREE.EquirectangularReflectionMapping;
 
-    let geometry = new THREE.TorusKnotGeometry( 18, 8, 150, 20 );
-    let material = new THREE.MeshStandardMaterial( {
-        metalness: params.roughness,
-        roughness: params.metalness,
-        envMapIntensity: 1.0
-    } );
+            scene.background = texture;
+            scene.environment = texture;
 
-    torusMesh = new THREE.Mesh( geometry, material );
-    torusMesh.scale.set(0.7,0.7,0.7);  
-    scene.add( torusMesh );
+            render();
 
-    geometry = new THREE.PlaneGeometry( 200, 200 );
-    material = new THREE.MeshBasicMaterial();
+            // model
 
-    planeMesh = new THREE.Mesh( geometry, material );
-    planeMesh.position.y = - 50;
-    planeMesh.rotation.x = - Math.PI * 0.5;
-    scene.add( planeMesh );
+            // use of RoughnessMipmapper is optional
+            const roughnessMipmapper = new RoughnessMipmapper( renderer );
 
-    THREE.DefaultLoadingManager.onLoad = function ( ) {
+            const loader = new GLTFLoader();
+            loader.load( model, function ( gltf ) {
 
-        pmremGenerator.dispose();
+                gltf.scene.traverse( function ( child ) {
 
-    };
+                    if ( child.isMesh ) {
 
-    new THREE.TextureLoader().load( equirectangular, function ( texture ) {
+                        roughnessMipmapper.generateMipmaps( child.material );
 
-        texture.encoding = THREE.sRGBEncoding;
+                    }
 
-        pngCubeRenderTarget = pmremGenerator.fromEquirectangular( texture );
+                } );
 
-        pngBackground = pngCubeRenderTarget.texture;
+                gltf.scene.scale.set(0.01,0.01,0.01)
+                scene.add( gltf.scene );
 
-        texture.dispose();
+                roughnessMipmapper.dispose();
 
-    });
+                render();
 
-    const pmremGenerator = new THREE.PMREMGenerator( renderer );
-    pmremGenerator.compileEquirectangularShader();
+            } );
 
+        } );
+
+    renderer = new THREE.WebGLRenderer( { antialias: true } );
     renderer.setPixelRatio( window.devicePixelRatio );
     renderer.setSize( window.innerWidth, window.innerHeight );
-
-    document.body.appendChild( renderer.domElement );
-
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1;
     renderer.outputEncoding = THREE.sRGBEncoding;
+    container.appendChild( renderer.domElement );
 
-    controls = new OrbitControls( camera, renderer.domElement );
-    controls.minDistance = 50;
-    controls.maxDistance = 300;
+    const controls = new OrbitControls( camera, renderer.domElement );
+    controls.addEventListener( 'change', render ); // use if there is no animation loop
+    controls.minDistance = 2;
+    controls.maxDistance = 10;
+    controls.target.set( 0, 0, - 0.2 );
+    controls.update();
 
     window.addEventListener( 'resize', onWindowResize );
+
 }
 
 function onWindowResize() {
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    camera.aspect = width / height;
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
 
-    document.body.appendChild( renderer.domElement );
-    renderer.setSize( width, height );
+    renderer.setSize( window.innerWidth, window.innerHeight );
 
-}
-
-function animate() {
-    requestAnimationFrame( animate );
     render();
+
 }
+
+//
 
 function render() {
-
-    torusMesh.material.roughness = params.roughness;
-    torusMesh.material.metalness = params.metalness;
-
-    let newEnvMap = torusMesh.material.envMap;
-    let background = scene.background;
-
-    newEnvMap = pngCubeRenderTarget ? pngCubeRenderTarget.texture : null;
-    background = pngBackground;
-
-    if ( newEnvMap !== torusMesh.material.envMap ) {
-
-        torusMesh.material.envMap = newEnvMap;
-        torusMesh.material.needsUpdate = true;
-
-        planeMesh.material.map = newEnvMap;
-        planeMesh.material.needsUpdate = true;
-
-    }
-
-    torusMesh.rotation.y += 0.005;
-    planeMesh.visible = params.debug;
-
-    scene.background = background;
-    renderer.toneMappingExposure = params.exposure;
 
     renderer.render( scene, camera );
 

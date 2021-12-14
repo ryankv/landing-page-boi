@@ -84,6 +84,16 @@ module.exports = {
                 {
                     loader: 'file-loader',
                 }],
+            },
+
+            // TEXTURES
+            {   
+                test: /\.hdr$/,
+                type: 'asset/resource',
+                generator:
+                {
+                    filename: 'assets/images/[hash][ext]'
+                }
             }
         ]
     }
